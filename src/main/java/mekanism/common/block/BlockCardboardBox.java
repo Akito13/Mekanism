@@ -2,6 +2,8 @@ package mekanism.common.block;
 
 import mekanism.api.NBTConstants;
 import mekanism.common.advancements.MekanismCriteriaTriggers;
+import mekanism.common.block.attribute.Attribute;
+import mekanism.common.block.interfaces.IFacingHandler;
 import mekanism.common.block.interfaces.IHasTileEntity;
 import mekanism.common.block.states.IStateStorage;
 import mekanism.common.item.block.ItemBlockCardboardBox;
@@ -12,6 +14,7 @@ import mekanism.common.tile.TileEntityCardboardBox;
 import mekanism.common.util.NBTUtils;
 import mekanism.common.util.WorldUtils;
 import net.minecraft.core.BlockPos;
+import net.minecraft.core.Direction;
 import net.minecraft.core.HolderGetter;
 import net.minecraft.core.registries.BuiltInRegistries;
 import net.minecraft.core.registries.Registries;
@@ -25,9 +28,12 @@ import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.level.BlockGetter;
 import net.minecraft.world.level.Level;
 import net.minecraft.world.level.block.Block;
+import net.minecraft.world.level.block.Rotation;
 import net.minecraft.world.level.block.entity.BlockEntity;
 import net.minecraft.world.level.block.state.BlockBehaviour;
 import net.minecraft.world.level.block.state.BlockState;
+import net.minecraft.world.level.block.state.properties.BlockStateProperties;
+import net.minecraft.world.level.block.state.properties.Property;
 import net.minecraft.world.level.material.MapColor;
 import net.minecraft.world.phys.BlockHitResult;
 import net.minecraft.world.phys.HitResult;
@@ -35,6 +41,8 @@ import net.minecraftforge.common.MinecraftForge;
 import net.minecraftforge.event.level.BlockEvent;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
+
+import java.util.Map;
 
 public class BlockCardboardBox extends BlockMekanism implements IStateStorage, IHasTileEntity<TileEntityCardboardBox> {
 
@@ -56,10 +64,10 @@ public class BlockCardboardBox extends BlockMekanism implements IStateStorage, I
             TileEntityCardboardBox box = WorldUtils.getTileEntity(TileEntityCardboardBox.class, world, pos);
             if (box != null && box.storedData != null) {
                 BlockData data = box.storedData;
-                //TODO: Note - this will not allow for rotation of the block based on how it is placed direction wise via the removal of
-                // the cardboard box and will instead leave it how it was when the box was initially put on
                 //Adjust the state based on neighboring blocks to ensure double chests properly become single chests again
-                BlockState adjustedState = Block.updateFromNeighbourShapes(data.blockState, world, pos);
+
+                BlockState adjustedState = Block.updateFromNeighbourShapes(data.setFacing(player.getDirection().getOpposite()), world, pos);
+
                 world.setBlockAndUpdate(pos, adjustedState);
                 if (data.tileTag != null) {
                     data.updateLocation(pos);
@@ -116,6 +124,12 @@ public class BlockCardboardBox extends BlockMekanism implements IStateStorage, I
         @Nullable
         public CompoundTag tileTag;
 
+        private final Map<Property<?>, IFacingHandler> FACING_HANDLERS = Map.of(
+                BlockStateProperties.FACING, (state, facing) -> state.setValue(BlockStateProperties.FACING, facing),
+                BlockStateProperties.HORIZONTAL_FACING, (state, facing) -> state.setValue(BlockStateProperties.HORIZONTAL_FACING, facing),
+                BlockStateProperties.ROTATION_16, (state, facing) -> state.setValue(BlockStateProperties.ROTATION_16, facing.get2DDataValue())
+        );
+
         public BlockData(@NotNull BlockState blockState) {
             this.blockState = blockState;
         }
@@ -141,6 +155,16 @@ public class BlockCardboardBox extends BlockMekanism implements IStateStorage, I
                 nbtTags.put(NBTConstants.TILE_TAG, tileTag);
             }
             return nbtTags;
+        }
+
+        public BlockState setFacing(Direction side) {
+            for (Map.Entry<Property<?>, Comparable<?>> entry: blockState.getValues().entrySet()) {
+                Property<?> property = entry.getKey();
+                if (FACING_HANDLERS.containsKey(property)) {
+                    return FACING_HANDLERS.get(entry.getKey()).setFacing(blockState, side);
+                }
+            }
+            return blockState;
         }
     }
 }
